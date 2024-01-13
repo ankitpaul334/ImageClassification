@@ -1,0 +1,166 @@
+
+!pip install tensorflow tensorflow-gpu opencv-python matplotlib
+#tensorflow and tensorflow-gpu will be used as a part of the deep learning pipelinine by keras api. ovencv for dodgy images and matplotlib for images.
+
+!pip list
+#checking for tensorflow and tensorflow-gpu installed using !pip list.
+
+
+import tensorflow as tf
+import os
+#importing dependencies using os(nav file struct- depends on machine) and tf.
+#os.path.file(’data’,’happy’)- file path for happy folder in data directory.
+#os.listdir(’data’) -list everything inside that folder.
+
+gpus = tf.config.experimental.list_physical_devices('GPU')
+#lists all the gpu devices
+
+for gpu in gpus:
+	tf.config.experimental.set_memory_growth(gpu,True)
+#the we limit the gpu usage, to prevent usage of all power while loading in tensorflow.prevents out of memory error.
+
+import cv2  
+import imghdr
+#the we import opencv and imghdr to remove dodgy images.
+
+#create a variable to hold the data directory.
+data_dir='data'
+
+#all the allowable image extensions
+image_exts=['jpeg','png','bmp','jpg']
+
+#cv2.imread - opens up the image read using open cv (reads as numpy 2d array)
+#open cv read image in BGR, matplotlib reads in RGB
+
+for image_class in os.listdir(data_dir): #happy & sad
+	for image in os.listdir(os.path.join(data_dir,image_class)): #each image inside happy and sad
+		image_path = os.path.join(data_dir,image_class,image)
+		try:
+			img=cv2.imread(image_path) #convert image into opencv
+			tip = imghdr.what(image_path) #make sure image matches the extension types
+		  if tip not in image_exts:
+				print('image not in ext list{}'.format(image_path))
+				os.remove(image_path) #remove images that dont match type
+		except Exception as e:
+			print('Issue with image{}.format(image_path))
+
+#tensorflow has a dataset api, allows to build a data pipeline, so you can scale large datasets rather that using in memory
+
+tf.data.Dataset?? #?? gives documnetation on jupyter notebook
+import numpy as np
+from matplotlib import pyplot as plt
+#keras has a data pipeline built into it as well, builds an image dataset , not needed to build labels, classes and preprocessing, resizing etc.
+
+data = tf.keras.utils.image_dataset_from_directory('data') #building data pipeling
+#cant take the first instance data[0] as it isn’t preloaded into the memory. it works like a generator, helps us to access the generator from the pipeline. 
+
+data_iterator = data.as_numpy_iterator() #used to grab the data on the go form pipeline
+#we can get the consecutive batches using the .next method.
+
+batch = data_iterator.next() 
+#accessing the batches of data size=32
+
+len(batch) = 2 #(images batch[0] and labels batch[1])
+batch[0].shape #shows arrays of different images.
+batch[1] #shows labels array of 0 and 1 maybe happy or sad
+
+#checking which class is assigned to which type of image and visualize it below
+
+#here 1=sad and 0=happy
+fig, ax = plt.subplots(ncols=4, figsize = (20,20))
+for idx ,img in enumerate(batch[0][:4]):
+	ax[idx].imshow(img))
+	ax[idx].title.set_text(batch[1][idx])
+
+#Preprocessing data
+#scaling the image values between 0 and 1 instead of 0 and 255 to generalize the data for model, then we split the data into training and testing data.
+
+scaled = batch[0]/255
+#this can be achieved by dividing the values in the batch by 255, so all values will be in between 0 and 1. but it is not ideal to do this for all the batches, instead we use data pipelining for it.
+
+scaled_data = data.map(lambda x,y: (x/255),y))
+#inside data function we use map to transform the data as it is being processed into the pipeline. speeds up access for the data from disk
+
+# this works the same as batch = data_iterator.nect()
+scaled_iterator = data.as_numpy_iterator().next()
+batch = scaled_iterator.next()
+batch[0].max # =1
+
+fig, ax = plt.subplots(ncols=4, figsize = (20,20))
+for idx ,img in enumerate(batch[0][:4]):
+	ax[idx].imshow(img))
+	ax[idx].title.set_text(batch[1][idx])
+
+#Split and test data
+
+len(data) = 7 #no of batches in total
+train_size = int(len(data)*.7)
+val_size = int(len(data)*.2)+1
+test_size = int(len(data)*.1+1
+#to split the data we can make use of the take and skip methods in tensorflow pipeline, make sure the data is shuffled before splitting it up
+
+train = data.take(train_size)
+val = data.skip(train_size).take(val_size)
+test= data.skip(train_size+val_size).take(test_size)
+
+#Deep Model
+#building the model using the keras sequential api
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout
+#in tensorflow.keras we have sequential and functional api’s. sequential is good when you have 1 data input and 1 output, top to bottom. functional is for multiple inputs and outputs.
+
+#Conv2D - convolution neural network layer
+#MaxPooling2D - to condense the dense images
+
+model = Sequential()
+
+model.add(Conv2D(16, (3,3), 1, activation='relu', input_shape =(256,256,3)))
+model.add(MaxPooling2D())
+
+model.add(Conv2D(32, (3,3), 1, activation='relu'))
+model.add(MaxPooling2D())
+
+model.add(Conv2D(16, (3,3), 1, activation='relu'))
+model.add(MaxPooling2D())
+
+model.add(Flatten())
+
+model.add(Dense(256, activation'relu'))
+model.add(Dense(1, activation='sigmoid'))
+
+
+#first layer will be convolution layer which needs to have the input for the model. it will have 16 layers of filters which scans the image and tries to condense/extract information relevant for classification. 
+#the filter will be 3,3 size and move 1 pixel each time. 
+#relu activation here takes in the input from the convolution and passes it through a function so that all values below 0 (-ve) are made 0 and it preserves the (+ve) values. 
+#good for non linear patterns.
+#sigmoid activation take in range of values and converts it into a 0 or 1
+#MaxPooling layer takes the max output from relu activation and returns it.
+#when applying the convolution layer the filters will be the last channel. we condense the rows and columns, no of filters will form the channel value.
+#When we pass it to dense layer we don’t want the channel value as to condense it down to a single value 0 or 1. it produces 256 neurons then 1 value as the output.
+
+model.compile('adam, loss=tf.losses.NinaryCrossentropy(), metrics=['accuracy'])
+#after all this we compile them. here we used the adam optimiser, adn since this is a binary classification we use binary cross entropy for calculating losses and accuracy
+
+model.summary()
+#summarizes the performance of the model
+
+#now we create a log directory, and callbacks to save the model at a checkpoint or specific logging
+
+logdir = 'logs'
+tensorboard_callback = tf.keras.callback.TensorBoard(log_fir=logdir)
+
+#after this we fit the model. model.fit is the training component model.predict predicts the values.
+
+hist = model.fit(train,epochs=20, validation_data=val, callbacks =[tensorboard_callbacks])
+
+#fit takes in the training data (4 batches of 16*16), epochs is no of times the model will run over training data. then we evaluate on validation data to see performance. 
+#All logs will be saved inside of tensorboard to check later.
+
+
+#plotting the data
+fig = plt.figure()
+plt.plot(hist.history['loss'], color='red', labes='loss')
+plt.plot(hist.history['val_loss'], color='orange', labes='val_loss')
+plt.legend(loc="upper left")
+plt.show()
